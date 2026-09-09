@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#17324d">
+<title>Rugby Squad Attendance</title>
+<style>
+:root{--navy:#17324d;--green:#2f7d55;--light:#f4f6f8;--line:#dfe4e8;--red:#c84b4b}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--light);color:#18232d}
+header{background:var(--navy);color:white;padding:22px 18px 18px;position:sticky;top:0;z-index:5}
+h1{font-size:22px;margin:0 0 4px}.sub{opacity:.8;font-size:13px}
+main{max-width:720px;margin:auto;padding:16px}
+.card{background:white;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px #0000000d}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.stat{font-size:26px;font-weight:750}.muted{color:#6d7882;font-size:13px}
+button{border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer}
+.primary{background:var(--green);color:white}.secondary{background:#e9eef2;color:var(--navy)}.danger{background:#f9e7e7;color:var(--red)}
+input{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:16px;margin:8px 0}
+.player{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}.player:last-child{border-bottom:0}
+.name{font-weight:650;flex:1}.badge{font-size:13px;font-weight:700;background:#edf5f0;color:var(--green);padding:6px 8px;border-radius:20px}
+.session-player{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.status{min-width:94px}.present{background:#dff2e7;color:#17623c}.absent{background:#f8e2e2;color:#9d2e2e}
+.empty{text-align:center;padding:20px;color:#68747e}
+h2{font-size:18px;margin:0 0 12px}.tabs{display:flex;gap:8px;margin-bottom:14px}.tabs button{flex:1}
+.small{font-size:12px;padding:8px 10px}
+.hidden{display:none!important}
+.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:flex-end;z-index:20}.modalbox{background:white;width:100%;max-width:720px;margin:auto;border-radius:18px 18px 0 0;padding:18px}
+@media(min-width:600px){.modal{align-items:center}.modalbox{border-radius:18px}}
+.session-date{font-weight:700}.count{font-size:13px;color:#68747e}
+</style>
+</head>
+<body>
+<header><h1>🏉 Rugby Squad Attendance</h1><div class="sub">Quick attendance tracking for your squad</div></header>
+<main>
+<div class="tabs">
+<button id="squadTab" class="primary" onclick="showPage('squad')">Squad</button>
+<button id="sessionTab" class="secondary" onclick="showPage('sessions')">Sessions</button>
+</div>
+
+<section id="squadPage">
+<div class="card">
+<div class="row"><div><div class="stat" id="playerCount">0</div><div class="muted">Players</div></div><button class="primary" onclick="openAddPlayer()">+ Add player</button></div>
+</div>
+<div class="card"><h2>Squad</h2><div id="players"></div></div>
+</section>
+
+<section id="sessionsPage" class="hidden">
+<div class="card">
+<div class="row"><div><h2 style="margin:0">Training sessions</h2><div class="muted">Record a new session in seconds</div></div><button class="primary" onclick="openSession()">+ New session</button></div>
+</div>
+<div class="card"><div id="sessions"></div></div>
+</section>
+</main>
+
+<div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
+<div class="modalbox" id="modalContent"></div>
+</div>
+
+<script>
+const KEY='rugbyAttendanceV1';
+let data=JSON.parse(localStorage.getItem(KEY)||'{"players":[],"sessions":[]}');
+function save(){localStorage.setItem(KEY,JSON.stringify(data));render();}
+function esc(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+function showPage(p){
+ document.getElementById('squadPage').classList.toggle('hidden',p!=='squad');
+ document.getElementById('sessionsPage').classList.toggle('hidden',p!=='sessions');
+ document.getElementById('squadTab').className=p==='squad'?'primary':'secondary';
+ document.getElementById('sessionTab').className=p==='sessions'?'primary':'secondary';
+}
+function openAddPlayer(){
+ modal.innerHTML=`<div class="modalbox"><h2>Add player</h2><input id="playerName" placeholder="Player name" autofocus>
+ <div class="row"><button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="addPlayer()">Add player</button></div></div>`;
+ modal.classList.remove('hidden'); setTimeout(()=>document.getElementById('playerName').focus(),50);
+}
+function addPlayer(){
+ const n=document.getElementById('playerName').value.trim(); if(!n)return;
+ data.players.push({id:Date.now().toString(),name:n,active:true}); save(); closeModal();
+}
+function closeModal(){modal.classList.add('hidden');}
+function openSession(){
+ if(!data.players.length){alert('Add some players first.');return;}
+ const today=new Date().toISOString().slice(0,10);
+ let checks={}; data.players.filter(p=>p.active).forEach(p=>checks[p.id]=true);
+ modal.innerHTML=`<div class="modalbox"><div class="row"><div><h2>New training session</h2><div class="muted">Tap a player to change attendance</div></div></div>
+ <input type="date" id="sessionDate" value="${today}">
+ <div id="sessionList">${data.players.filter(p=>p.active).map(p=>`<div class="session-player"><span class="name">${esc(p.name)}</span><button class="status present" id="st-${p.id}" onclick="toggleAttend('${p.id}')">✓ Present</button></div>`).join('')}</div>
+ <div class="row" style="margin-top:14px"><button class="secondary" onclick="closeModal()">Cancel</button><button class="primary" onclick="saveSession()">Save session</button></div></div>`;
+ modal.classList.remove('hidden'); window.currentChecks=checks;
+}
+function toggleAttend(id){
+ currentChecks[id]=!currentChecks[id]; const b=document.getElementById('st-'+id);
+ b.className='status '+(currentChecks[id]?'present':'absent'); b.textContent=currentChecks[id]?'✓ Present':'✕ Absent';
+}
+function saveSession(){
+ const date=document.getElementById('sessionDate').value;
+ if(!date)return;
+ data.sessions.push({id:Date.now().toString(),date,attendance:{...currentChecks}});
+ data.sessions.sort((a,b)=>a.date.localeCompare(b.date)); save(); closeModal(); showPage('sessions');
+}
+function totals(p){
+ const sessions=data.sessions.filter(s=>s.attendance&&Object.prototype.hasOwnProperty.call(s.attendance,p.id));
+ const attended=sessions.filter(s=>s.attendance[p.id]).length;
+ return [attended,sessions.length];
+}
+function render(){
+ playerCount.textContent=data.players.filter(p=>p.active).length;
+ const active=data.players.filter(p=>p.active);
+ players.innerHTML=active.length?active.map(p=>{let [a,t]=totals(p);return `<div class="player"><span class="name">${esc(p.name)}</span><span class="badge">${a} / ${t}</span><button class="secondary small" onclick="renamePlayer('${p.id}')">Edit</button></div>`}).join(''):'<div class="empty">No players yet. Add your first player above.</div>';
+ sessions.innerHTML=data.sessions.length?[...data.sessions].reverse().map(s=>`<div class="player"><div style="flex:1"><div class="session-date">${new Date(s.date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}</div><div class="count">${Object.values(s.attendance).filter(Boolean).length} present</div></div><button class="danger small" onclick="deleteSession('${s.id}')">Delete</button></div>`).join(''):'<div class="empty">No sessions recorded yet.</div>';
+}
+function renamePlayer(id){
+ const p=data.players.find(x=>x.id===id); const n=prompt('Player name:',p.name); if(n&&n.trim()){p.name=n.trim();save();}
+}
+function deleteSession(id){if(confirm('Delete this training session?')){data.sessions=data.sessions.filter(s=>s.id!==id);save();}}
+render();
+</script>
+</body>
+</html>
